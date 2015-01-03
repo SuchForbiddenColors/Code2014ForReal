@@ -1,0 +1,265 @@
+#include "WPILib.h"
+//#include "DriveTrain.h"
+//#include "Pneumatics.h"
+//#include "Catapult.h" //Because we just get them from DSLCD.h
+#include "DSLCD.h"		//Unrepeatability probably could be a major problem, but not yet
+#include "Defines.h"
+
+/**
+ * This is a demo program showing the use of the RobotBase class.
+ * The SimpleRobot class is the base of a robot application that will automatically call your
+ * Autonomous and OperatorControl methods at the right time as controlled by the switches on
+ * the driver station or the field controls.
+ */ 
+class RobotDemo : public SimpleRobot
+{
+	DriveTrain *car; // robot drive system
+	Joystick *rstick; 
+	Joystick *lstick;
+	Joystick *threestick;
+	Joystick *XStick;
+	Victor *testMotor;
+	Pneumatics *air;
+	Catapult *cata;
+	Timer *time;
+	DSLCD *bonhomme;
+	
+	DriverStationLCD *dslcd;
+	
+	char* consoleMessage;
+
+public:
+	RobotDemo()
+	{
+		car = new DriveTrain(1,2);
+		air = new Pneumatics(PRESSURE_SWITCH_CHANNEL,COMPRESSOR_SPIKE,SOLEN_1,SOLEN_2,SOLEN_3,SOLEN_4,REED_SWITCH_CHANNEL);
+		cata = new Catapult(WINCH_MOTOR,CAGE_MOTOR,CATAPULT_LIMIT_SWITCH,3,3);
+		dslcd = DriverStationLCD::GetInstance();
+		rstick = new Joystick(1);
+		lstick = new Joystick(2);
+		threestick = new Joystick(4);
+		XStick = new Joystick(3);
+		time = new Timer();
+		bonhomme = new DSLCD();
+		testMotor = new Victor(10);
+	}
+
+	/**
+	 * Drive left & right motors for 2 seconds then stop
+	 */
+	void Autonomous()
+	{
+		GetWatchdog().SetEnabled(false);
+		PrintBuildTime();
+		
+		//TODO: This is the auto drive code. Just comment them in or out with /* and */
+		
+		/*time->Stop(); //Just in case 'twas running			//  <-- THIS PART IS THE CODE
+		time->Reset();										   //JUST ADD OR TAKE AWAY THE 
+		time->Start();										  //AFOREMENTIONED COMMENT MARKERS
+															 //THESE COMMENTS WON'T AFFECT ANY OF THAT
+		while(time->Get() < 1) // Timer goes up to one second
+		{
+			car->Drive(.4,0);
+		}
+		
+		car->Drive(0,0);
+		time->Stop();
+		time->Reset(); */
+		
+		// Auto code stops here
+	}
+
+	
+	void OperatorControl()
+	{
+		GetWatchdog().SetEnabled(true);
+		
+		AxisCamera &camera = AxisCamera::GetInstance("10.33.97.11");  //TODO: Image it
+		
+		bool XDrive = true;
+		bool moveHasBeenPressedX = false;
+		bool moveHasBeenPressedJ = false;
+		bool rollWinch = false;
+		bool shouldConnect = true;
+		bool hasBeenStopped = false;
+		double hasBeenShouldConnect = 0;
+		PrintBuildTime();
+
+		while (IsOperatorControl())
+		{
+			GetWatchdog().Feed();
+			
+			if(rstick->GetRawButton(R_XDRIVE_ON))
+			{XDrive = true;}
+			if(XStick->GetRawButton(X_BACK) && XStick->GetRawButton(X_A))
+			{XDrive = true;}
+			if(rstick->GetRawButton(R_XDRIVE_OFF))
+			{XDrive = false;}
+			if(XStick->GetRawButton(X_BACK) && XStick->GetRawButton(X_B))
+			{XDrive = false;}
+			
+			
+			if(!XDrive)
+			{
+				car->TankDrive(lstick, rstick);
+			}
+			else
+			{
+				car->XBoxDrive(XStick);
+			}
+			
+			// These are functions to test winch and cage. They are not final functions
+			
+			//float winchMove;
+			//winchMove = XStick->GetRawAxis(3); //Left Y axis
+			//cata->TestWinch(winchMove);
+			
+			//float cageMove = rstick->GetY();
+			//cata->CageTest(cageMove);
+			
+			
+			//Joystick buttons
+			
+			if(lstick->GetRawButton(L_FLASH_TRUE))
+			{air->Flash(true);}
+			if(lstick->GetRawButton(L_FLASH_FALSE))
+			{
+				air->Flash(false);
+				shouldConnect = true;
+			}
+			
+			if(rstick->GetRawButton(R_MOVE_1))
+			{
+				if(moveHasBeenPressedJ==false)
+				{
+					air->Move(1);
+				}
+				moveHasBeenPressedJ = true;
+			}
+			else
+			{
+				moveHasBeenPressedJ = false;
+			}
+			
+			if(lstick->GetRawButton(L_ROLL_WINCH) && false) //Don't want this to be doable yet
+			{											  
+				rollWinch = true;
+			}
+			
+			
+			// XStick buttons
+			
+			if(XStick->GetRawButton(X_A) && XStick->GetRawButton(X_LEFT_BUMPER))
+			{
+				if(moveHasBeenPressedX==false)
+				{
+					air->Move(1);
+				}
+				moveHasBeenPressedX = true;
+			}
+			else
+			{
+				moveHasBeenPressedX = false;
+			}
+			
+			if(XStick->GetRawAxis(3) <= 0)
+			{
+				float cageSpeed = -1 * XStick->GetRawAxis(3);
+				if(XStick->GetRawButton(X_B))
+				{cageSpeed *= -1;}
+				cata->CageTest(cageSpeed);
+			}
+
+			if(XStick->GetRawButton(X_X) && (XStick->GetRawAxis(3) == 1))
+			{
+				rollWinch = true;
+			}
+			
+			if(XStick->GetRawButton(X_Y))
+			{
+				air->Flash(false);
+				shouldConnect = true;
+			}
+			
+			if(XStick->GetRawButton(X_A))
+			{
+				air->Flash(true);
+				shouldConnect = false;
+			}
+			
+			//Auto functions
+			
+			if(shouldConnect)
+			{
+				time->Start();
+			}
+			else
+			{
+				time->Stop();
+				time->Reset();
+			}
+			
+			hasBeenShouldConnect = time->Get();
+			
+			if(hasBeenShouldConnect > .2 && (air->PressureSwitch() == 1))
+			{
+				air->Flash(true);
+				shouldConnect = false;
+			}
+			
+			if(rollWinch && (air->PressureSwitch() == 1))  //Only roll winch if pressure switch is full
+			{											  
+				if(cata->LimitSwitch() == 0)
+				{		
+					cata->TestWinch(ROLL_SPEED);
+					if(XStick->GetRawButton(XLR_EMERGENCY_STOP_BUTTON) || lstick->GetRawButton(XLR_EMERGENCY_STOP_BUTTON))
+					{
+						rollWinch = false;
+						cata->TestWinch(0);
+					}
+				}
+				else
+				{
+					time->Stop(); time->Reset(); time->Start();
+					while(time->Get() < .1)
+					{
+						cata->TestWinch(-.2);
+					}
+					time->Stop(); time->Reset();
+					cata->TestWinch(0);
+					rollWinch = false;
+					shouldConnect = false;
+				}
+			}
+			
+			air->Message(dslcd);
+			//car->Message(dslcd);
+			cata->Message(dslcd,rollWinch,5);
+			//bonhomme->WriteMessage(dslcd, bonhomme->margerine);
+			
+			//float timer = GetWatchdog().GetTimer();
+			//float expire = GetWatchdog().GetExpiration(); // Watchdog gets hungry at half a second
+						
+			
+			Wait(0.005);	// wait for a motor update time
+		}
+	}
+	
+	/**
+	 * Runs during test mode
+	 */
+	void Test() {
+
+	}
+	
+	void PrintBuildTime() {
+		dslcd->PrintfLine(dslcd->kUser_Line1,"Build: %s",__DATE__);
+		dslcd->PrintfLine(dslcd->kUser_Line2,"       %s",__TIME__);
+		dslcd->UpdateLCD();
+		printf("\nBuild: %s\n\t%s\n",__DATE__,__TIME__);
+	}
+};
+
+START_ROBOT_CLASS(RobotDemo);
+
